@@ -1,0 +1,39 @@
+# Production-ish compose: pulls the published image from GHCR.
+# Build locally instead with: docker compose -f docker-compose.dev.yml up --build
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agent}
+      POSTGRES_DB: ${POSTGRES_DB:-agent_uploader}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ghcr.io/jsserve-org/agent-uploader-cc:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-agent}:${POSTGRES_PASSWORD:-agent}@db:5432/${POSTGRES_DB:-agent_uploader}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      STORAGE_DIR: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-2147483648}
+      CLEANUP_SECRET: ${CLEANUP_SECRET:-}
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - uploads:/data/uploads
+
+volumes:
+  db-data:
+  uploads:
