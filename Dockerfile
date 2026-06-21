@@ -17,12 +17,13 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Placeholders so `next build` can evaluate modules; never used at runtime,
-# the real values are injected by the container environment.
-ENV DATABASE_URL=postgres://build:build@localhost:5432/build
-ENV BETTER_AUTH_SECRET=build-time-placeholder
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build
+# The placeholders only let `next build` evaluate modules; they are scoped to
+# this RUN (not persisted as image ENV) and never used at runtime — the real
+# values are injected by the container environment.
+RUN DATABASE_URL=postgres://build:build@localhost:5432/build \
+    BETTER_AUTH_SECRET=build-time-placeholder \
+    pnpm build
 
 # ---- Runtime -------------------------------------------------------------
 FROM base AS runner
