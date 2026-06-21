@@ -103,6 +103,25 @@ git push origin v0.1.0
 
 Tags published: `vX.Y.Z` → `X.Y.Z`, `X.Y`, `X`, and `latest`.
 
+### Make the GHCR package public (one-time)
+
+New org container packages are **private** by default, and GitHub has no API to
+change package visibility — it's a one-time web-UI step:
+
+1. Open
+   `https://github.com/orgs/jsserve-org/packages/container/agent-uploader-cc/settings`
+2. Under **Danger Zone → Change visibility**, choose **Public** and confirm.
+3. (Optional) Under **Repository source**, link the package to this repo so it
+   shows on the repo page.
+
+Verify it's anonymously pullable:
+
+```bash
+docker manifest inspect ghcr.io/jsserve-org/agent-uploader-cc:v0.1.0
+```
+
+Visibility sticks across future tag pushes, so this is only needed once.
+
 ## Environment variables
 
 | Variable | Required | Description |
