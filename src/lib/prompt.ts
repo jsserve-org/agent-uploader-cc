@@ -23,6 +23,10 @@ export function buildAgentPrompt(opts: {
   retentionSeconds: number;
   singleUse: boolean;
   appUrl?: string;
+  folder?: string | null;
+  allowedTypes?: string | null;
+  maxDownloads?: number | null;
+  hasPassword?: boolean;
 }): string {
   const base = (opts.appUrl ?? env.appUrl).replace(/\/$/, "");
   const uploadUrl = `${base}/api/upload`;
@@ -31,20 +35,43 @@ export function buildAgentPrompt(opts: {
     ? "This key is SINGLE USE — it works for exactly one upload, then it is permanently burned."
     : "This key may be used a limited number of times.";
 
-  return `You have access to a file-upload service. Upload the target file (for example an APK) using the single-use key and endpoint below.
+  // Extra constraints worth telling the agent about, rendered as bullet lines.
+  const constraints: string[] = [];
+  if (opts.allowedTypes) {
+    constraints.push(`- Only these file types are accepted: ${opts.allowedTypes}`);
+  }
+  if (opts.maxDownloads) {
+    constraints.push(
+      `- The uploaded file may be downloaded at most ${opts.maxDownloads} time(s) before it is deleted.`,
+    );
+  }
+  if (opts.hasPassword) {
+    constraints.push(
+      `- Downloads are password-protected; share the password (provided separately) with whoever needs the file.`,
+    );
+  }
+  const constraintsBlock =
+    constraints.length > 0 ? `\nConstraints:\n${constraints.join("\n")}\n` : "";
+
+  // Optional header to drop the upload into a specific folder.
+  const folderHeader = opts.folder
+    ? ` \\\n    -H "X-Folder: ${opts.folder}"`
+    : "";
+
+  return `You have access to a file-upload service. Upload the target file (for example an APK) using the key and endpoint below.
 
 ${useLine}
 The uploaded file is automatically deleted after ${retention}.
-
+${constraintsBlock}
 Run this command, replacing /path/to/file with the real file path:
 
   curl -sS -X POST "${uploadUrl}" \\
-    -H "Authorization: Bearer ${opts.token}" \\
+    -H "Authorization: Bearer ${opts.token}"${folderHeader} \\
     -F "file=@/path/to/file"
 
 On success the response is JSON like:
 
   { "ok": true, "url": "${base}/f/<id>", "filename": "...", "expiresAt": "..." }
 
-Report the "url" value back — that is the public download link. Do not reuse the key after a successful upload.`;
+Report the "url" value back — that is the download link. Do not reuse the key after a successful upload.`;
 }

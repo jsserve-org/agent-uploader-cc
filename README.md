@@ -23,7 +23,28 @@ and the file self-destructs after a retention window you choose (24h by default)
 
 Keys are stored only as SHA-256 hashes — the raw token is shown exactly once.
 
+## Per-key controls
+
+When you create a key you can attach policies that apply to everything uploaded
+with it:
+
+- **Retention** — files self-destruct after the chosen window (24h default).
+- **Use limit** — single-use by default, or up to N uploads.
+- **Folder / tag** — group uploads (agents can override per upload via
+  `X-Folder` header or a `folder` form field). The dashboard filters by folder.
+- **File-type allowlist** — restrict to extensions / MIME patterns
+  (e.g. `.apk, application/zip`); other types are rejected with `415`.
+- **Download cap** — delete each file after N downloads.
+- **Download password** — share links require a password (`?pw=` or a form).
+- **Upload webhook** — POST file metadata to a URL on every successful upload.
+- **Rate limiting** — the upload endpoint is throttled per IP and per key.
+
+The dashboard also shows **usage analytics** (files held, total downloads,
+downloads in the last 7 days, storage used) and lets you **delete** any upload.
+
 ## API
+
+> All uploads are rate-limited per IP and per key (`429` with `Retry-After`).
 
 ### `POST /api/upload`
 
@@ -42,17 +63,27 @@ curl -X POST "$APP_URL/api/upload" \
   --data-binary @./app.apk
 ```
 
+Optionally set `-H "X-Folder: releases/android"` (or a `folder` form field) to
+place the upload in a folder.
+
 Response:
 
 ```json
 { "ok": true, "id": "…", "url": "https://…/f/…", "filename": "app.apk",
   "size": 12345, "contentType": "application/octet-stream",
-  "expiresAt": "2026-01-01T00:00:00.000Z" }
+  "folder": "releases/android", "expiresAt": "2026-01-01T00:00:00.000Z" }
 ```
 
 ### `GET /f/:id`
 
-Downloads the file. Returns `410 Gone` once expired (and reaps it).
+Downloads the file. Returns `410 Gone` once expired (and reaps it). If the key
+set a download password, supply it as `?pw=…`, an `X-Download-Password` header,
+or a bearer token; browsers get a small password form. If a download cap was set,
+the file is deleted once the cap is reached.
+
+### `DELETE /api/uploads/:id`
+
+Deletes an upload you own (session-authenticated). Used by the dashboard.
 
 ### `POST /api/cleanup`
 
@@ -132,3 +163,5 @@ Visibility sticks across future tag pushes, so this is only needed once.
 | `STORAGE_DIR` | no | Where blobs are written (default `./data/uploads`, `/data/uploads` in Docker) |
 | `MAX_UPLOAD_BYTES` | no | Hard per-upload size ceiling (default 2 GiB) |
 | `CLEANUP_SECRET` | no | Shared secret guarding `POST /api/cleanup` |
+| `UPLOAD_RATE_LIMIT` | no | Max upload requests per window, per IP and per key (default 30) |
+| `UPLOAD_RATE_WINDOW_MS` | no | Rate-limit window in ms (default 60000) |

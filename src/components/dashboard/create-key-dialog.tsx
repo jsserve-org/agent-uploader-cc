@@ -39,16 +39,28 @@ export function CreateKeyDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [label, setLabel] = useState("");
   const [retention, setRetention] = useState(String(24 * 3600));
   const [maxUses, setMaxUses] = useState("1");
+  const [folder, setFolder] = useState("");
+  const [allowedTypes, setAllowedTypes] = useState("");
+  const [maxDownloads, setMaxDownloads] = useState("");
+  const [downloadPassword, setDownloadPassword] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
 
   function reset() {
     setCreated(null);
+    setShowAdvanced(false);
     setLabel("");
     setRetention(String(24 * 3600));
     setMaxUses("1");
+    setFolder("");
+    setAllowedTypes("");
+    setMaxDownloads("");
+    setDownloadPassword("");
+    setWebhookUrl("");
   }
 
   async function submit() {
@@ -58,14 +70,21 @@ export function CreateKeyDialog() {
     }
     setLoading(true);
     try {
+      const body: Record<string, unknown> = {
+        label: label.trim(),
+        retentionSeconds: Number(retention),
+        maxUses: Number(maxUses),
+      };
+      if (folder.trim()) body.defaultFolder = folder.trim();
+      if (allowedTypes.trim()) body.allowedTypes = allowedTypes.trim();
+      if (maxDownloads.trim()) body.maxDownloads = Number(maxDownloads);
+      if (downloadPassword) body.downloadPassword = downloadPassword;
+      if (webhookUrl.trim()) body.webhookUrl = webhookUrl.trim();
+
       const res = await fetch("/api/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: label.trim(),
-          retentionSeconds: Number(retention),
-          maxUses: Number(maxUses),
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -100,7 +119,7 @@ export function CreateKeyDialog() {
                 after creation.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto py-2 pr-1">
               <div className="space-y-2">
                 <Label htmlFor="label">Label</Label>
                 <Input
@@ -147,6 +166,75 @@ export function CreateKeyDialog() {
                   </Select>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((s) => !s)}
+                className="text-sm text-muted-foreground underline underline-offset-4"
+              >
+                {showAdvanced ? "Hide" : "Show"} advanced options
+              </button>
+
+              {showAdvanced && (
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="folder">Folder / tag</Label>
+                    <Input
+                      id="folder"
+                      value={folder}
+                      onChange={(e) => setFolder(e.target.value)}
+                      placeholder="releases/android"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="types">Allowed file types</Label>
+                    <Input
+                      id="types"
+                      value={allowedTypes}
+                      onChange={(e) => setAllowedTypes(e.target.value)}
+                      placeholder=".apk, .aab, application/zip"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Comma-separated extensions or MIME patterns. Blank = any.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maxdl">Max downloads per file</Label>
+                    <Input
+                      id="maxdl"
+                      type="number"
+                      min={1}
+                      value={maxDownloads}
+                      onChange={(e) => setMaxDownloads(e.target.value)}
+                      placeholder="Unlimited"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The file is deleted once this many downloads occur.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="dlpw">Download password</Label>
+                    <Input
+                      id="dlpw"
+                      value={downloadPassword}
+                      onChange={(e) => setDownloadPassword(e.target.value)}
+                      placeholder="Leave blank for public links"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="hook">Upload webhook URL</Label>
+                    <Input
+                      id="hook"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      placeholder="https://example.com/webhook"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      POSTed file metadata on each successful upload.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button onClick={submit} disabled={loading}>
@@ -172,6 +260,21 @@ export function CreateKeyDialog() {
                   <CopyButton value={created.token} label="key" />
                 </div>
               </div>
+              {downloadPassword && (
+                <div className="space-y-2">
+                  <Label>Download password</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-xs">
+                      {downloadPassword}
+                    </code>
+                    <CopyButton value={downloadPassword} label="password" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Share this with whoever downloads the file — it isn&apos;t
+                    shown again.
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Agent prompt</Label>

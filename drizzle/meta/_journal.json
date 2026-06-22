@@ -8,6 +8,13 @@
       "when": 1782060247113,
       "tag": "0000_pink_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782142736564,
+      "tag": "0001_narrow_gideon",
+      "breakpoints": true
     }
   ]
 }

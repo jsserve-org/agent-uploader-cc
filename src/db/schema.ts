@@ -94,6 +94,16 @@ export const uploadKey = pgTable("upload_key", {
   usedCount: integer("used_count").notNull().default(0),
   // optional cap on the size of a single uploaded file, in bytes
   maxFileBytes: bigint("max_file_bytes", { mode: "number" }),
+  // folder/tag applied to uploads from this key (agents may override per upload)
+  defaultFolder: text("default_folder"),
+  // comma-separated allowlist of extensions/MIME patterns (e.g. ".apk,application/zip")
+  allowedTypes: text("allowed_types"),
+  // cap on how many times each uploaded file can be downloaded (null = unlimited)
+  maxDownloads: integer("max_downloads"),
+  // sha-256 of a download password; when set, downloads require the password
+  downloadPasswordHash: text("download_password_hash"),
+  // optional URL POSTed with upload metadata on each successful upload
+  webhookUrl: text("webhook_url"),
   revoked: boolean("revoked").notNull().default(false),
   // when the key itself stops being accepted (independent of file retention)
   expiresAt: timestamp("expires_at"),
@@ -119,12 +129,38 @@ export const upload = pgTable("upload", {
   size: bigint("size", { mode: "number" }).notNull(),
   // path on disk relative to STORAGE_DIR
   storageKey: text("storage_key").notNull(),
+  // folder/tag for organising uploads (resolved from key/agent at upload time)
+  folder: text("folder"),
   downloadCount: integer("download_count").notNull().default(0),
+  // cap copied from the key at upload time; the file is reaped once reached
+  maxDownloads: integer("max_downloads"),
+  // download password hash copied from the key at upload time
+  passwordHash: text("password_hash"),
+  lastDownloadAt: timestamp("last_download_at"),
   createdAt: timestamp("created_at")
     .$defaultFn(() => new Date())
     .notNull(),
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+/**
+ * One row per successful download, for usage analytics (downloads over time).
+ */
+export const downloadEvent = pgTable("download_event", {
+  id: text("id").primaryKey(),
+  uploadId: text("upload_id")
+    .notNull()
+    .references(() => upload.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  keyId: text("key_id"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at")
+    .$defaultFn(() => new Date())
+    .notNull(),
+});
+
 export type UploadKey = typeof uploadKey.$inferSelect;
 export type Upload = typeof upload.$inferSelect;
+export type DownloadEvent = typeof downloadEvent.$inferSelect;

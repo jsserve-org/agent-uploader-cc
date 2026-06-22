@@ -36,6 +36,10 @@ export function readBlobStream(storageKey: string) {
   return createReadStream(resolveSafe(storageKey));
 }
 
+export async function readBlob(storageKey: string): Promise<Buffer> {
+  return fs.readFile(resolveSafe(storageKey));
+}
+
 export async function blobExists(storageKey: string): Promise<boolean> {
   try {
     await fs.access(resolveSafe(storageKey));

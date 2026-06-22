@@ -5,14 +5,29 @@ import { db } from "@/db";
 import { uploadKey, upload } from "@/db/schema";
 import { extractToken, hashToken } from "@/lib/keys";
 import { writeBlob, deleteBlob } from "@/lib/storage";
+import { rateLimit, sweepRateBuckets } from "@/lib/rate-limit";
+import { isTypeAllowed, parseAllowedTypes } from "@/lib/filetype";
+import { dispatchWebhook } from "@/lib/webhook";
 import { env } from "@/env";
 
 export const runtime = "nodejs";
 // Allow large request bodies (APKs etc.).
 export const maxDuration = 300;
 
-function err(status: number, message: string) {
-  return NextResponse.json({ ok: false, error: message }, { status });
+function err(status: number, message: string, headers?: HeadersInit) {
+  return NextResponse.json({ ok: false, error: message }, { status, headers });
+}
+
+function clientIp(req: Request): string {
+  const fwd = req.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return req.headers.get("x-real-ip") ?? "unknown";
+}
+
+function sanitizeFolder(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = raw.trim().replace(/[^\w.\- /]+/g, "").slice(0, 100);
+  return cleaned || null;
 }
 
 export async function POST(req: Request) {
@@ -21,11 +36,24 @@ export async function POST(req: Request) {
     return err(401, "Missing key. Send 'Authorization: Bearer <key>'.");
   }
 
+  // Rate limit per client IP and per key, before doing real work.
+  sweepRateBuckets();
+  const ip = clientIp(req);
+  const tokenHash = hashToken(token);
+  for (const bucket of [`ip:${ip}`, `tok:${tokenHash}`]) {
+    const rl = rateLimit(bucket);
+    if (!rl.ok) {
+      return err(429, "Rate limit exceeded. Slow down.", {
+        "Retry-After": String(rl.retryAfterSeconds),
+      });
+    }
+  }
+
   // Look up the key by hash and validate it is currently usable.
   const [key] = await db
     .select()
     .from(uploadKey)
-    .where(eq(uploadKey.tokenHash, hashToken(token)))
+    .where(eq(uploadKey.tokenHash, tokenHash))
     .limit(1);
 
   if (!key) return err(401, "Invalid key.");
@@ -70,6 +98,7 @@ export async function POST(req: Request) {
     let filename = "upload.bin";
     let contentType = "application/octet-stream";
     let data: Buffer;
+    let folderOverride: string | null = null;
 
     const ct = req.headers.get("content-type") ?? "";
     if (ct.includes("multipart/form-data")) {
@@ -82,6 +111,8 @@ export async function POST(req: Request) {
       filename = file.name || filename;
       contentType = file.type || contentType;
       data = Buffer.from(await file.arrayBuffer());
+      const formFolder = form.get("folder");
+      if (typeof formFolder === "string") folderOverride = formFolder;
     } else {
       // Raw body upload: filename comes from a header.
       filename =
@@ -102,10 +133,25 @@ export async function POST(req: Request) {
       );
     }
 
+    // Enforce the key's file-type allowlist, if any.
+    const allowed = parseAllowedTypes(key.allowedTypes);
+    if (!isTypeAllowed(filename, contentType, allowed)) {
+      await releaseClaim();
+      return err(
+        415,
+        `File type not allowed. This key accepts: ${key.allowedTypes}`,
+      );
+    }
+
     // Sanitise the display filename; never trust it for the storage path.
     const safeName = filename.replace(/[^\w.\-]+/g, "_").slice(0, 200) || "upload.bin";
     const id = nanoid();
     const storageKey = `${id.slice(0, 2)}/${id}-${safeName}`;
+
+    // Resolve the destination folder: agent override (header/form) or key default.
+    const folder =
+      sanitizeFolder(folderOverride ?? req.headers.get("x-folder")) ??
+      sanitizeFolder(key.defaultFolder);
 
     await writeBlob(storageKey, data);
 
@@ -120,6 +166,9 @@ export async function POST(req: Request) {
         contentType,
         size: data.byteLength,
         storageKey,
+        folder,
+        maxDownloads: key.maxDownloads,
+        passwordHash: key.downloadPasswordHash,
         expiresAt,
       });
     } catch (e) {
@@ -128,6 +177,22 @@ export async function POST(req: Request) {
     }
 
     const url = `${env.appUrl.replace(/\/$/, "")}/f/${id}`;
+
+    // Best-effort webhook notification (never blocks success on failure).
+    if (key.webhookUrl) {
+      await dispatchWebhook(key.webhookUrl, {
+        event: "upload.created",
+        id,
+        url,
+        filename: safeName,
+        contentType,
+        size: data.byteLength,
+        folder,
+        keyLabel: key.label,
+        expiresAt: expiresAt.toISOString(),
+      });
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -136,6 +201,7 @@ export async function POST(req: Request) {
         filename: safeName,
         size: data.byteLength,
         contentType,
+        folder,
         expiresAt: expiresAt.toISOString(),
       },
       { status: 201 },

@@ -7,6 +7,7 @@ import { uploadKey } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { generateToken, hashToken, tokenHint } from "@/lib/keys";
 import { buildAgentPrompt } from "@/lib/prompt";
+import { parseAllowedTypes } from "@/lib/filetype";
 
 const createSchema = z.object({
   label: z.string().trim().min(1).max(100),
@@ -22,6 +23,16 @@ const createSchema = z.object({
   maxFileMb: z.number().int().min(1).max(4096).optional(),
   // optional key validity window in hours (how long the key itself is accepted)
   keyTtlHours: z.number().int().min(1).max(24 * 30).optional(),
+  // folder/tag applied to uploads from this key
+  defaultFolder: z.string().trim().max(100).optional(),
+  // comma-separated allowlist of extensions / MIME patterns
+  allowedTypes: z.string().trim().max(500).optional(),
+  // cap on downloads per uploaded file
+  maxDownloads: z.number().int().min(1).max(100000).optional(),
+  // password required to download files from this key
+  downloadPassword: z.string().min(1).max(200).optional(),
+  // webhook POSTed on each successful upload
+  webhookUrl: z.string().url().max(500).optional(),
 });
 
 export async function GET() {
@@ -67,6 +78,10 @@ export async function POST(req: Request) {
     ? new Date(Date.now() + input.keyTtlHours * 3600 * 1000)
     : null;
 
+  const normalizedAllowed = input.allowedTypes
+    ? parseAllowedTypes(input.allowedTypes).join(",")
+    : null;
+
   await db.insert(uploadKey).values({
     id,
     userId: userRow.id,
@@ -76,6 +91,13 @@ export async function POST(req: Request) {
     retentionSeconds: input.retentionSeconds,
     maxUses: input.maxUses,
     maxFileBytes: input.maxFileMb ? input.maxFileMb * 1024 * 1024 : null,
+    defaultFolder: input.defaultFolder || null,
+    allowedTypes: normalizedAllowed || null,
+    maxDownloads: input.maxDownloads ?? null,
+    downloadPasswordHash: input.downloadPassword
+      ? hashToken(input.downloadPassword)
+      : null,
+    webhookUrl: input.webhookUrl || null,
     expiresAt,
   });
 
@@ -83,6 +105,10 @@ export async function POST(req: Request) {
     token,
     retentionSeconds: input.retentionSeconds,
     singleUse: input.maxUses === 1,
+    folder: input.defaultFolder || null,
+    allowedTypes: normalizedAllowed,
+    maxDownloads: input.maxDownloads ?? null,
+    hasPassword: Boolean(input.downloadPassword),
   });
 
   // The raw token is returned exactly once — it is never stored in plaintext.
