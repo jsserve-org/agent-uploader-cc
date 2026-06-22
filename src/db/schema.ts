@@ -131,6 +131,14 @@ export const upload = pgTable("upload", {
   storageKey: text("storage_key").notNull(),
   // folder/tag for organising uploads (resolved from key/agent at upload time)
   folder: text("folder"),
+  // --- Android app metadata (populated for .apk uploads when parseable) ---
+  isApk: boolean("is_apk").notNull().default(false),
+  appPackage: text("app_package"),
+  appLabel: text("app_label"),
+  appVersionName: text("app_version_name"),
+  appVersionCode: bigint("app_version_code", { mode: "number" }),
+  // app icon as a data: URL (only stored when reasonably small)
+  appIcon: text("app_icon"),
   downloadCount: integer("download_count").notNull().default(0),
   // cap copied from the key at upload time; the file is reaped once reached
   maxDownloads: integer("max_downloads"),

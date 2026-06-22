@@ -40,6 +40,11 @@ export async function readBlob(storageKey: string): Promise<Buffer> {
   return fs.readFile(resolveSafe(storageKey));
 }
 
+/** Absolute on-disk path for a blob (used by tools that read by path). */
+export function blobPath(storageKey: string): string {
+  return resolveSafe(storageKey);
+}
+
 export async function blobExists(storageKey: string): Promise<boolean> {
   try {
     await fs.access(resolveSafe(storageKey));

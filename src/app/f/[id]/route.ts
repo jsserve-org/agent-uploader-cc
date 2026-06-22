@@ -10,6 +10,7 @@ import {
   deleteBlob,
 } from "@/lib/storage";
 import { hashToken } from "@/lib/keys";
+import { looksLikeApk, APK_CONTENT_TYPE } from "@/lib/apk";
 
 export const runtime = "nodejs";
 
@@ -123,8 +124,14 @@ export async function GET(
     ipAddress: clientIp(req),
   });
 
+  // Serve APKs with the Android package MIME so phones offer to install them.
+  const isApk = row.isApk || looksLikeApk(row.filename, row.contentType);
+  const serveType = isApk
+    ? APK_CONTENT_TYPE
+    : row.contentType || "application/octet-stream";
+
   const headers = {
-    "Content-Type": row.contentType || "application/octet-stream",
+    "Content-Type": serveType,
     "Content-Length": String(row.size),
     "Content-Disposition": `attachment; filename="${row.filename}"`,
     "Cache-Control": "private, no-store",

@@ -4,10 +4,11 @@ import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { uploadKey, upload } from "@/db/schema";
 import { extractToken, hashToken } from "@/lib/keys";
-import { writeBlob, deleteBlob } from "@/lib/storage";
+import { writeBlob, deleteBlob, blobPath } from "@/lib/storage";
 import { rateLimit, sweepRateBuckets } from "@/lib/rate-limit";
 import { isTypeAllowed, parseAllowedTypes } from "@/lib/filetype";
 import { dispatchWebhook } from "@/lib/webhook";
+import { looksLikeApk, parseApkMetadata } from "@/lib/apk";
 import { env } from "@/env";
 
 export const runtime = "nodejs";
@@ -155,6 +156,18 @@ export async function POST(req: Request) {
 
     await writeBlob(storageKey, data);
 
+    // If this is an APK, extract store metadata (package, version, icon).
+    const isApk = looksLikeApk(safeName, contentType);
+    const apk = isApk
+      ? await parseApkMetadata(blobPath(storageKey))
+      : {
+          appPackage: null,
+          appLabel: null,
+          appVersionName: null,
+          appVersionCode: null,
+          appIcon: null,
+        };
+
     const expiresAt = new Date(Date.now() + key.retentionSeconds * 1000);
 
     try {
@@ -167,6 +180,12 @@ export async function POST(req: Request) {
         size: data.byteLength,
         storageKey,
         folder,
+        isApk,
+        appPackage: apk.appPackage,
+        appLabel: apk.appLabel,
+        appVersionName: apk.appVersionName,
+        appVersionCode: apk.appVersionCode,
+        appIcon: apk.appIcon,
         maxDownloads: key.maxDownloads,
         passwordHash: key.downloadPasswordHash,
         expiresAt,

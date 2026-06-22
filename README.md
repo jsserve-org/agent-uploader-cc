@@ -42,6 +42,21 @@ with it:
 The dashboard also shows **usage analytics** (files held, total downloads,
 downloads in the last 7 days, storage used) and lets you **delete** any upload.
 
+## App Store (Agent Downloader)
+
+`/store` is a mobile-first store for your uploaded APKs:
+
+- Uploaded `.apk` files are parsed for **package name, version, and icon**, so the
+  store shows real app cards (builds of the same package are grouped, newest
+  featured, older builds one tap away).
+- Tapping **Install** downloads the APK served with the
+  `application/vnd.android.package-archive` MIME type, so Android offers to
+  install it directly (allow installs from your browser if prompted).
+- A **QR code** opens the store on your phone — scan, log in, install.
+- A search box filters by app name, package, or filename.
+
+Log in on your phone, open `/store`, and install — no cable, no `adb`.
+
 ## API
 
 > All uploads are rate-limited per IP and per key (`429` with `Retry-After`).

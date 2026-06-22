@@ -13,9 +13,14 @@ export default async function Home() {
         </span>
         <nav className="flex items-center gap-2">
           {session ? (
-            <Button asChild size="sm">
-              <Link href="/dashboard">Dashboard</Link>
-            </Button>
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/store">App Store</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+            </>
           ) : (
             <>
               <Button asChild variant="ghost" size="sm">

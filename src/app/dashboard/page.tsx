@@ -131,7 +131,12 @@ export default async function DashboardPage({
           </Link>
           <p className="text-sm text-muted-foreground">{session.user.email}</p>
         </div>
-        <SignOutButton />
+        <div className="flex items-center gap-1">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/store">App Store</Link>
+          </Button>
+          <SignOutButton />
+        </div>
       </header>
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
